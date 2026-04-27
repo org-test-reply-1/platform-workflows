@@ -3,4 +3,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run Python Test Action
-        uses: org-test-reply-1/platform-actions/dot-net\dotnet_build.yml@main
+        uses: org-test-reply-1/platform-actions/dot-net/dotnet_build.yml@main
