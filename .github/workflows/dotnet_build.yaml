@@ -1,6 +1,11 @@
+name: Reusable CI Workflow
+
+on:
+  workflow_call:
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Run Python Test Action
+      - name: Run test
         uses: org-test-reply-1/platform-actions/dot-net/dotnet_build.yml@main
