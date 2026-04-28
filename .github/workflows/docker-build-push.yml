@@ -18,6 +18,8 @@ on:
       dry-run:
         type: boolean
         default: true
+      runner:
+        type: string
     outputs:
       full-tag:
         description: "Full image:tag that was built"
@@ -26,7 +28,7 @@ on:
 jobs:
   docker:
     name: Docker Build
-    runs-on: arc-runner-set
+    runs-on: ${{ inputs.runner }}
     outputs:
       full-tag: ${{ steps.docker.outputs.full-tag }}
 
