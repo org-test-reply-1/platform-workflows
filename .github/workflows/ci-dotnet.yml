@@ -3,9 +3,6 @@ name: CI .NET (Reusable)
 on:
   workflow_call:
     inputs:
-      dotnet-version:
-        type: string
-        default: "9.0.x"
       project-path:
         type: string
         default: "."
@@ -33,6 +30,5 @@ jobs:
         id: dotnet
         uses: org-test-reply-1/platform-actions/dotnet-build@main
         with:
-          dotnet-version: ${{ inputs.dotnet-version }}
           project-path: ${{ inputs.project-path }}
           run-tests: ${{ inputs.run-tests }}
