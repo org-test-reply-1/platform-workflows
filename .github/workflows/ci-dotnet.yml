@@ -1,0 +1,36 @@
+name: CI .NET (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        type: string
+        default: "9.0.x"
+      project-path:
+        type: string
+        default: "."
+      run-tests:
+        type: boolean
+        default: true
+    outputs:
+      artifact-name:
+        description: "Name of the published build artifact"
+        value: ${{ jobs.build.outputs.artifact-name }}
+
+jobs:
+  build:
+    name: .NET Build
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: ${{ steps.dotnet.outputs.artifact-name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build & Test
+        id: dotnet
+        uses: org-test-reply-1/platform-actions/dotnet-build@main
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+          project-path: ${{ inputs.project-path }}
+          run-tests: ${{ inputs.run-tests }}

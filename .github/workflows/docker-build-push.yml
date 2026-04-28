@@ -1,0 +1,51 @@
+name: Docker Build & Push (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        type: string
+        required: true
+      registry:
+        type: string
+        default: "ghcr.io"
+      dockerfile:
+        type: string
+        default: "./Dockerfile"
+      context:
+        type: string
+        default: "."
+      dry-run:
+        type: boolean
+        default: true
+    secrets:
+      registry-username:
+        required: true
+      registry-password:
+        required: true
+    outputs:
+      full-tag:
+        description: "Full image:tag that was built"
+        value: ${{ jobs.docker.outputs.full-tag }}
+
+jobs:
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    outputs:
+      full-tag: ${{ steps.docker.outputs.full-tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build & Push
+        id: docker
+        uses: org-test-reply-1/platform-actions/docker-build-push@main
+        with:
+          image-name: ${{ inputs.image-name }}
+          registry: ${{ inputs.registry }}
+          dockerfile: ${{ inputs.dockerfile }}
+          context: ${{ inputs.context }}
+          dry-run: ${{ inputs.dry-run }}
+          registry-username: ${{ secrets.registry-username }}
+          registry-password: ${{ secrets.registry-password }}
