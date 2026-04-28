@@ -31,7 +31,7 @@ on:
 jobs:
   docker:
     name: Docker Build
-    runs-on: ubuntu-latest
+    runs-on: arc-runner-set
     outputs:
       full-tag: ${{ steps.docker.outputs.full-tag }}
 
