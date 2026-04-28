@@ -18,11 +18,6 @@ on:
       dry-run:
         type: boolean
         default: true
-    secrets:
-      registry-username:
-        required: true
-      registry-password:
-        required: true
     outputs:
       full-tag:
         description: "Full image:tag that was built"
@@ -47,5 +42,3 @@ jobs:
           dockerfile: ${{ inputs.dockerfile }}
           context: ${{ inputs.context }}
           dry-run: ${{ inputs.dry-run }}
-          registry-username: ${{ secrets.registry-username }}
-          registry-password: ${{ secrets.registry-password }}
