@@ -12,6 +12,8 @@ on:
       run-tests:
         type: boolean
         default: true
+      runner:
+        type: string
     outputs:
       artifact-name:
         description: "Name of the published build artifact"
@@ -20,7 +22,7 @@ on:
 jobs:
   build:
     name: .NET Build
-    runs-on: arc-runner-set
+    runs-on: ${{ inputs.runner }}
     outputs:
       artifact-name: ${{ steps.dotnet.outputs.artifact-name }}
 
