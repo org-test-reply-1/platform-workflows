@@ -62,8 +62,9 @@ on:
 
       # Autenticazione GitHub per ARC (scegli PAT oppure GitHub App)
       # Viene salvato come secret Kubernetes nel cluster
-      ARC_GITHUB_TOKEN:
-        required: false   # richiesto se non usi GitHub App
+      ARC_GITHUB_TOKEN: # richiesto se non usi GitHub App
+        required: false
+        default: "" 
       ARC_GITHUB_APP_ID:
         required: false
       ARC_GITHUB_APP_INSTALLATION_ID:
