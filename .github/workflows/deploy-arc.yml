@@ -1,0 +1,210 @@
+name: Deploy ARC Runner Scale Set
+
+# -----------------------------------------------------------------------
+# Reusable Workflow — platform-workflows/.github/workflows/deploy-arc.yml
+#
+# Chiamato dal workflow di trigger ogni volta che Dockerfile o values.yaml
+# vengono modificati su main. Gestisce:
+#   1. Creazione/aggiornamento del secret Kubernetes (da Organization Secrets)
+#   2. Patch del values.yaml con il nuovo tag immagine
+#   3. helm upgrade del runner scale set su AKS
+# -----------------------------------------------------------------------
+
+on:
+  workflow_call:
+    inputs:
+      image_full_tag:
+        description: "Tag completo dell'immagine runner (ghcr.io/org/image:tag)"
+        required: true
+        type: string
+
+      arc_runner_set_name:
+        description: "Nome dell'installazione Helm del runner scale set"
+        required: false
+        type: string
+        default: "arc-runner-set"
+
+      arc_namespace:
+        description: "Namespace Kubernetes dei runner"
+        required: false
+        type: string
+        default: "arc-runners"
+
+      arc_system_namespace:
+        description: "Namespace del controller ARC"
+        required: false
+        type: string
+        default: "arc-system"
+
+      github_config_url:
+        description: "URL organization o repository GitHub per ARC"
+        required: true
+        type: string
+
+      values_yaml_path:
+        description: "Percorso del values.yaml da aggiornare"
+        required: false
+        type: string
+        default: "./arc-runner-image/values.yaml"
+
+    secrets:
+      # Credenziali AKS — salvate come Organization Secrets
+      AZURE_CLIENT_ID:
+        required: true
+      AZURE_TENANT_ID:
+        required: true
+      AZURE_SUBSCRIPTION_ID:
+        required: true
+      AKS_RESOURCE_GROUP:
+        required: true
+      AKS_CLUSTER_NAME:
+        required: true
+
+      # Autenticazione GitHub per ARC (scegli PAT oppure GitHub App)
+      # Viene salvato come secret Kubernetes nel cluster
+      ARC_GITHUB_TOKEN:
+        required: false   # richiesto se non usi GitHub App
+      ARC_GITHUB_APP_ID:
+        required: false
+      ARC_GITHUB_APP_INSTALLATION_ID:
+        required: false
+      ARC_GITHUB_APP_PRIVATE_KEY:
+        required: false
+
+jobs:
+  deploy-arc-runner:
+    name: Deploy ARC Runner su AKS
+    runs-on: ubuntu-latest
+    environment: production   # richiede approvazione manuale se configurato
+
+    steps:
+      # ---------------------------------------------------------------- #
+      # 1. Checkout del repo platform-workflows
+      # ---------------------------------------------------------------- #
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------- #
+      # 2. Login ad Azure con OIDC (nessun secret a lunga scadenza)
+      # ---------------------------------------------------------------- #
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # ---------------------------------------------------------------- #
+      # 3. Ottieni credenziali AKS e imposta kubectl
+      # ---------------------------------------------------------------- #
+      - name: Imposta kubeconfig per AKS
+        uses: azure/aks-set-context@v3
+        with:
+          resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
+          cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
+
+      # ---------------------------------------------------------------- #
+      # 4. Crea i namespace se non esistono
+      # ---------------------------------------------------------------- #
+      - name: Crea namespace ARC (se assenti)
+        run: |
+          kubectl create namespace ${{ inputs.arc_system_namespace }} --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create namespace ${{ inputs.arc_namespace }} --dry-run=client -o yaml | kubectl apply -f -
+
+      # ---------------------------------------------------------------- #
+      # 5. Crea/aggiorna il secret Kubernetes con le credenziali GitHub
+      #    Supporta sia PAT che GitHub App (l'uno o l'altro).
+      #    I valori arrivano dagli Organization Secrets → nessun plain text.
+      # ---------------------------------------------------------------- #
+      - name: Crea secret Kubernetes (PAT)
+        if: ${{ secrets.ARC_GITHUB_TOKEN != '' }}
+        run: |
+          kubectl create secret generic arc-github-secret \
+            --namespace ${{ inputs.arc_namespace }} \
+            --from-literal=github_token='${{ secrets.ARC_GITHUB_TOKEN }}' \
+            --dry-run=client -o yaml | kubectl apply -f -
+          echo "Secret PAT applicato."
+
+      - name: Crea secret Kubernetes (GitHub App)
+        if: ${{ secrets.ARC_GITHUB_APP_ID != '' }}
+        run: |
+          # Scrive la private key in un file temporaneo per --from-file
+          echo '${{ secrets.ARC_GITHUB_APP_PRIVATE_KEY }}' > /tmp/arc-app-key.pem
+
+          kubectl create secret generic arc-github-secret \
+            --namespace ${{ inputs.arc_namespace }} \
+            --from-literal=github_app_id='${{ secrets.ARC_GITHUB_APP_ID }}' \
+            --from-literal=github_app_installation_id='${{ secrets.ARC_GITHUB_APP_INSTALLATION_ID }}' \
+            --from-file=github_app_private_key=/tmp/arc-app-key.pem \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          rm -f /tmp/arc-app-key.pem
+          echo "Secret GitHub App applicato."
+
+      # ---------------------------------------------------------------- #
+      # 6. Patch del values.yaml: sostituisce il tag immagine corrente
+      #    con quello appena pubblicato (passato come input dal caller).
+      # ---------------------------------------------------------------- #
+      - name: Aggiorna tag immagine nel values.yaml
+        run: |
+          NEW_TAG="${{ inputs.image_full_tag }}"
+          VALUES_FILE="${{ inputs.values_yaml_path }}"
+
+          echo "Aggiornamento immagine in ${VALUES_FILE} → ${NEW_TAG}"
+
+          # Usa yq per aggiornare solo il campo image in modo sicuro
+          # (non regexreplace su file yaml grezzo)
+          docker run --rm -v "$(pwd):/workdir" mikefarah/yq:4 \
+            e ".template.spec.containers[0].image = \"${NEW_TAG}\"" \
+            -i "/workdir/${VALUES_FILE}"
+
+          echo "values.yaml aggiornato:"
+          cat "${VALUES_FILE}"
+
+      # ---------------------------------------------------------------- #
+      # 7. helm upgrade — installa o aggiorna il runner scale set
+      # ---------------------------------------------------------------- #
+      - name: Helm upgrade arc-runner-set
+        run: |
+          helm upgrade ${{ inputs.arc_runner_set_name }} \
+            --namespace ${{ inputs.arc_namespace }} \
+            --create-namespace \
+            --set githubConfigUrl="${{ inputs.github_config_url }}" \
+            --set githubConfigSecret=arc-github-secret \
+            -f ${{ inputs.values_yaml_path }} \
+            oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
+            --wait \
+            --timeout 5m
+
+      # ---------------------------------------------------------------- #
+      # 8. Verifica che i pod siano attivi dopo il deploy
+      # ---------------------------------------------------------------- #
+      - name: Verifica pod runner
+        run: |
+          echo "=== Pod in ${{ inputs.arc_namespace }} ==="
+          kubectl get pods -n ${{ inputs.arc_namespace }}
+
+          echo "=== Pod in ${{ inputs.arc_system_namespace }} ==="
+          kubectl get pods -n ${{ inputs.arc_system_namespace }}
+
+          # Attende che il listener sia Running (max 3 minuti)
+          kubectl wait pod \
+            --for=condition=Ready \
+            --selector=actions.github.com/scale-set-name=${{ inputs.arc_runner_set_name }} \
+            --namespace ${{ inputs.arc_system_namespace }} \
+            --timeout=180s || true
+
+      # ---------------------------------------------------------------- #
+      # 9. Summary del deploy
+      # ---------------------------------------------------------------- #
+      - name: Summary deploy
+        if: always()
+        run: |
+          echo "### Deploy ARC completato" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Campo | Valore |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Immagine | \`${{ inputs.image_full_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Runner Set | \`${{ inputs.arc_runner_set_name }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Namespace | \`${{ inputs.arc_namespace }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cluster | \`${{ secrets.AKS_CLUSTER_NAME }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Config URL | ${{ inputs.github_config_url }} |" >> "$GITHUB_STEP_SUMMARY"

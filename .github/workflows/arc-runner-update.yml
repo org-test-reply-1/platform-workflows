@@ -1,0 +1,107 @@
+name: ARC Runner Image — Build & Deploy
+
+# -----------------------------------------------------------------------
+# Trigger: qualsiasi push su main che tocchi Dockerfile o values.yaml
+# dentro arc-runner-image/.
+# Orchestra:
+#   1. Composite Action  → build + push immagine su GHCR
+#   2. Reusable Workflow → deploy su AKS via Helm
+# -----------------------------------------------------------------------
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "arc-runner-image/Dockerfile"
+      - "arc-runner-image/values.yaml"
+
+  # Permette di eseguire manualmente dalla UI GitHub (utile per rollback)
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag immagine da forzare (lascia vuoto per SHA commit)"
+        required: false
+        default: ""
+      force_deploy:
+        description: "Forza il deploy anche senza modifiche ai file"
+        type: boolean
+        default: false
+
+# Permette la creazione di package su GHCR
+permissions:
+  contents: read
+  packages: write
+  id-token: write   # necessario per OIDC Azure login
+
+# Variabili condivise tra i job
+env:
+  REGISTRY: ghcr.io
+  # Formato: ghcr.io/<org>/<image> — adatta il nome org alla tua organizzazione
+  IMAGE_NAME: ${{ github.repository_owner }}/aks-arc-runner
+  GITHUB_CONFIG_URL: "https://github.com/${{ github.repository_owner }}"
+
+jobs:
+  # ===================================================================== #
+  # JOB 1 — Build e Push dell'immagine runner custom
+  # ===================================================================== #
+  build-runner-image:
+    name: Build & Push Runner Image
+    runs-on: ubuntu-latest
+
+    outputs:
+      # Passa il tag completo al job successivo
+      image_full_tag: ${{ steps.build.outputs.image_full_tag }}
+
+    steps:
+      - name: Checkout platform-workflows
+        uses: actions/checkout@v4
+
+      # Richiama la Composite Action da platform-actions
+      # In un setup enterprise la ref punta al repo platform-actions
+      - name: Build e Push immagine runner
+        id: build
+        uses: ./../platform-actions/docker-build-push
+        # Se platform-actions è un repo separato:
+        # uses: <org>/platform-actions/docker-build-push@main
+        with:
+          registry: ${{ env.REGISTRY }}
+          image_name: ${{ env.IMAGE_NAME }}
+          image_tag: ${{ inputs.image_tag }}          # vuoto → usa SHA commit
+          dockerfile_path: ./arc-runner-image/Dockerfile
+          context_path: ./arc-runner-image
+          registry_token: ${{ secrets.GITHUB_TOKEN }} # GITHUB_TOKEN ha già scope packages
+
+  # ===================================================================== #
+  # JOB 2 — Deploy su AKS tramite Reusable Workflow
+  # Si esegue solo se il build è andato a buon fine
+  # ===================================================================== #
+  deploy-arc:
+    name: Deploy ARC su AKS
+    needs: build-runner-image
+    # Richiama il Reusable Workflow nello stesso repo (platform-workflows)
+    uses: ./.github/workflows/deploy-arc.yml
+    # Se è un repo separato:
+    # uses: <org>/platform-workflows/.github/workflows/deploy-arc.yml@main
+    with:
+      image_full_tag: ${{ needs.build-runner-image.outputs.image_full_tag }}
+      arc_runner_set_name: arc-runner-set
+      arc_namespace: arc-runners
+      arc_system_namespace: arc-system
+      github_config_url: ${{ env.GITHUB_CONFIG_URL }}
+      values_yaml_path: ./arc-runner-image/values.yaml
+    secrets:
+      # Credenziali Azure — Organization Secrets
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AKS_RESOURCE_GROUP: ${{ secrets.AKS_RESOURCE_GROUP }}
+      AKS_CLUSTER_NAME: ${{ secrets.AKS_CLUSTER_NAME }}
+      # Autenticazione GitHub per ARC
+      # Scegli UNO dei due metodi e commenta l'altro:
+      # --- Metodo 1: PAT ---
+      #ARC_GITHUB_TOKEN: ${{ secrets.ARC_GITHUB_TOKEN }}
+      # --- Metodo 2: GitHub App (consigliato per enterprise) ---
+      ARC_GITHUB_APP_ID: ${{ secrets.ARC_GITHUB_APP_ID }}
+      ARC_GITHUB_APP_INSTALLATION_ID: ${{ secrets.ARC_GITHUB_APP_INSTALLATION_ID }}
+      ARC_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ARC_GITHUB_APP_PRIVATE_KEY }}

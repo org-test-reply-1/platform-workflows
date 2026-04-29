@@ -1,0 +1,53 @@
+# values.yaml — ARC Runner Scale Set
+# Questo file viene aggiornato automaticamente dalla pipeline
+# ogni volta che viene pubblicata una nuova immagine runner.
+# NON modificare il campo image.tag manualmente.
+
+githubConfigUrl: "https://github.com/org-test-reply-1"
+githubConfigSecret: arc-github-secret
+
+# Numero min/max di runner istanziati dinamicamente
+minRunners: 0
+maxRunners: 10
+
+template:
+  spec:
+    containers:
+      - name: runner
+        # Tag aggiornato automaticamente dalla pipeline (SHA commit)
+        image: ghcr.io/org-test-reply-1/aks-arc-runner:latest
+        command:
+          - /home/runner/run.sh
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+        env:
+          - name: DOCKER_HOST
+            value: tcp://localhost:2376
+          - name: DOCKER_TLS_VERIFY
+            value: "1"
+          - name: DOCKER_CERT_PATH
+            value: /certs/client
+
+      # Sidecar Docker-in-Docker (necessario per build Docker nei workflow)
+      - name: dind
+        image: docker:dind
+        securityContext:
+          privileged: true
+        volumeMounts:
+          - name: docker-certs
+            mountPath: /certs/client
+
+    volumes:
+      - name: docker-certs
+        emptyDir: {}
+
+    # Tollerazioni opzionali per nodi dedicati ai runner
+    # tolerations:
+    #   - key: "arc-runner"
+    #     operator: "Exists"
+    #     effect: "NoSchedule"
