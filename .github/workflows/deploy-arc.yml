@@ -150,27 +150,6 @@ jobs:
 
           rm -f /tmp/arc-app-key.pem
           echo "Secret GitHub App applicato."
-
-      # ---------------------------------------------------------------- #
-      # 6. Patch del values.yaml: sostituisce il tag immagine corrente
-      #    con quello appena pubblicato (passato come input dal caller).
-      # ---------------------------------------------------------------- #
-      - name: Aggiorna tag immagine nel values.yaml
-        run: |
-          NEW_TAG="${{ inputs.image_full_tag }}"
-          VALUES_FILE="${{ inputs.values_yaml_path }}"
-
-          echo "Aggiornamento immagine in ${VALUES_FILE} → ${NEW_TAG}"
-
-          # Usa yq per aggiornare solo il campo image in modo sicuro
-          # (non regexreplace su file yaml grezzo)
-          docker run --rm -v "$(pwd):/workdir" mikefarah/yq:4 \
-            e ".template.spec.containers[0].image = \"${NEW_TAG}\"" \
-            -i "/workdir/${VALUES_FILE}"
-
-          echo "values.yaml aggiornato:"
-          cat "${VALUES_FILE}"
-
       # ---------------------------------------------------------------- #
       # 7. helm upgrade — installa o aggiorna il runner scale set
       # ---------------------------------------------------------------- #
@@ -179,8 +158,6 @@ jobs:
           helm upgrade ${{ inputs.arc_runner_set_name }} \
             --namespace ${{ inputs.arc_namespace }} \
             --create-namespace \
-            --set githubConfigUrl="${{ inputs.github_config_url }}" \
-            --set githubConfigSecret=arc-github-secret \
             -f ${{ inputs.values_yaml_path }} \
             oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
             --wait \
