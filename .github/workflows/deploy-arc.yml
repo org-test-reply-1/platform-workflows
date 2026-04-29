@@ -47,6 +47,16 @@ on:
         type: string
         default: "./arc-runner-image/values.yaml"
 
+      use_pat:
+        type: boolean
+        required: false
+        default: false
+    
+      use_github_app:
+        type: boolean
+        required: false
+        default: true
+
     secrets:
       # Credenziali AKS — salvate come Organization Secrets
       AZURE_CLIENT_ID:
@@ -64,7 +74,6 @@ on:
       # Viene salvato come secret Kubernetes nel cluster
       ARC_GITHUB_TOKEN: # richiesto se non usi GitHub App
         required: false
-        default: "" 
       ARC_GITHUB_APP_ID:
         required: false
       ARC_GITHUB_APP_INSTALLATION_ID:
@@ -118,7 +127,7 @@ jobs:
       #    I valori arrivano dagli Organization Secrets → nessun plain text.
       # ---------------------------------------------------------------- #
       - name: Crea secret Kubernetes (PAT)
-        if: ${{ secrets.ARC_GITHUB_TOKEN != '' }}
+        if: ${{ inputs.use_pat }}
         run: |
           kubectl create secret generic arc-github-secret \
             --namespace ${{ inputs.arc_namespace }} \
@@ -127,7 +136,7 @@ jobs:
           echo "Secret PAT applicato."
 
       - name: Crea secret Kubernetes (GitHub App)
-        if: ${{ secrets.ARC_GITHUB_APP_ID != '' }}
+        if: ${{ inputs.use_github_app }}
         run: |
           # Scrive la private key in un file temporaneo per --from-file
           echo '${{ secrets.ARC_GITHUB_APP_PRIVATE_KEY }}' > /tmp/arc-app-key.pem
