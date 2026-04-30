@@ -65,10 +65,6 @@ jobs:
     name: Deploy ARC Runner su AKS
     runs-on: ubuntu-latest
     environment: production
-    permissions:
-      packages: read
-      id-token: write
-      contents: read
 
     steps:
       # ---------------------------------------------------------------- #
@@ -95,16 +91,6 @@ jobs:
         with:
           resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
           cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
-
-      # ---------------------------------------------------------------- #
-      # 4. Login GHCR per chart OCI
-      #    GITHUB_TOKEN è automatico, non serve aggiungerlo ai secrets.
-      # ---------------------------------------------------------------- #
-      - name: Login a GHCR
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io \
-            --username ${{ github.actor }} \
-            --password-stdin
 
       # ---------------------------------------------------------------- #
       # 5. Namespace
@@ -163,7 +149,7 @@ jobs:
             --install \
             --namespace ${{ inputs.arc_system_namespace }} \
             --create-namespace \
-            oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-controller \
+            oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller \
             --wait \
             --timeout 5m
 
