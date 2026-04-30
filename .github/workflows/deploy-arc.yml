@@ -139,15 +139,19 @@ jobs:
         if: ${{ inputs.use_github_app }}
         run: |
           # Scrive la private key in un file temporaneo per --from-file
-          echo '${{ secrets.ARC_GITHUB_APP_PRIVATE_KEY }}' > /tmp/arc-app-key.pem
-
+          printf '%s' '${{ secrets.ARC_GITHUB_APP_PRIVATE_KEY }}' > /tmp/arc-app-key.pem
+      
+          # Elimina il secret se esiste già, poi lo ricrea da zero
+          kubectl delete secret arc-github-secret \
+            --namespace ${{ inputs.arc_namespace }} \
+            --ignore-not-found=true
+      
           kubectl create secret generic arc-github-secret \
             --namespace ${{ inputs.arc_namespace }} \
             --from-literal=github_app_id='${{ secrets.ARC_GITHUB_APP_ID }}' \
             --from-literal=github_app_installation_id='${{ secrets.ARC_GITHUB_APP_INSTALLATION_ID }}' \
-            --from-file=github_app_private_key=/tmp/arc-app-key.pem \
-            --dry-run=client -o yaml | kubectl apply -f -
-
+            --from-file=github_app_private_key=/tmp/arc-app-key.pem
+      
           rm -f /tmp/arc-app-key.pem
           echo "Secret GitHub App applicato."
       # ---------------------------------------------------------------- #
