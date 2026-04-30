@@ -160,6 +160,7 @@ jobs:
       - name: Helm upgrade arc-runner-set
         run: |
           helm upgrade ${{ inputs.arc_runner_set_name }} \
+            --install \
             --namespace ${{ inputs.arc_namespace }} \
             --create-namespace \
             -f ${{ inputs.values_yaml_path }} \
