@@ -32,3 +32,8 @@ jobs:
         with:
           project-path: ${{ inputs.project-path }}
           run-tests: ${{ inputs.run-tests }}
+
+      - name: Tag Repository
+        uses: org-test-reply-1/platform-actions/tag-repo@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
