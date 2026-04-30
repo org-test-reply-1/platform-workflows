@@ -176,23 +176,23 @@ jobs:
           kubectl rollout status deployment arc-gha-rs-controller \
             -n ${{ inputs.arc_system_namespace }} \
             --timeout=120s
-            # ---------------------------------------------------------------- #
-            # 8. Verifica che i pod siano attivi dopo il deploy
-            # ---------------------------------------------------------------- #
-            - name: Verifica pod runner
-              run: |
-                echo "=== Pod in ${{ inputs.arc_namespace }} ==="
-                kubectl get pods -n ${{ inputs.arc_namespace }}
-      
-                echo "=== Pod in ${{ inputs.arc_system_namespace }} ==="
-                kubectl get pods -n ${{ inputs.arc_system_namespace }}
-      
-                # Attende che il listener sia Running (max 3 minuti)
-                kubectl wait pod \
-                  --for=condition=Ready \
-                  --selector=actions.github.com/scale-set-name=${{ inputs.arc_runner_set_name }} \
-                  --namespace ${{ inputs.arc_system_namespace }} \
-                  --timeout=180s || true
+      # ---------------------------------------------------------------- #
+      # 8. Verifica che i pod siano attivi dopo il deploy
+      # ---------------------------------------------------------------- #
+      - name: Verifica pod runner
+        run: |
+          echo "=== Pod in ${{ inputs.arc_namespace }} ==="
+          kubectl get pods -n ${{ inputs.arc_namespace }}
+
+          echo "=== Pod in ${{ inputs.arc_system_namespace }} ==="
+          kubectl get pods -n ${{ inputs.arc_system_namespace }}
+
+          # Attende che il listener sia Running (max 3 minuti)
+          kubectl wait pod \
+            --for=condition=Ready \
+            --selector=actions.github.com/scale-set-name=${{ inputs.arc_runner_set_name }} \
+            --namespace ${{ inputs.arc_system_namespace }} \
+            --timeout=180s || true
 
       # ---------------------------------------------------------------- #
       # 9. Summary del deploy
