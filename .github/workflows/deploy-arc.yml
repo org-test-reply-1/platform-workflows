@@ -8,21 +8,26 @@ on:
         required: true
         type: string
       arc_runner_set_name:
+        description: "Nome dell'installazione Helm del runner scale set"
         required: false
         type: string
         default: "arc-runner-set"
       arc_namespace:
+        description: "Namespace Kubernetes dei runner"
         required: false
         type: string
         default: "arc-runners"
       arc_system_namespace:
+        description: "Namespace del controller ARC"
         required: false
         type: string
         default: "arc-system"
       github_config_url:
+        description: "URL organization o repository GitHub per ARC"
         required: true
         type: string
       values_yaml_path:
+        description: "Percorso del values.yaml da aggiornare"
         required: false
         type: string
         default: "./arc-runner-image/values.yaml"
@@ -60,6 +65,10 @@ jobs:
     name: Deploy ARC Runner su AKS
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      packages: read
+      id-token: write
+      contents: read
 
     steps:
       # ---------------------------------------------------------------- #
@@ -88,7 +97,17 @@ jobs:
           cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
 
       # ---------------------------------------------------------------- #
-      # 4. Namespace
+      # 4. Login GHCR per chart OCI
+      #    GITHUB_TOKEN è automatico, non serve aggiungerlo ai secrets.
+      # ---------------------------------------------------------------- #
+      - name: Login a GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io \
+            --username ${{ github.actor }} \
+            --password-stdin
+
+      # ---------------------------------------------------------------- #
+      # 5. Namespace
       # ---------------------------------------------------------------- #
       - name: Crea namespace ARC (se assenti)
         run: |
@@ -96,7 +115,7 @@ jobs:
           kubectl create namespace ${{ inputs.arc_namespace }} --dry-run=client -o yaml | kubectl apply -f -
 
       # ---------------------------------------------------------------- #
-      # 5. Secret GitHub (PAT)
+      # 6. Secret GitHub (PAT)
       # ---------------------------------------------------------------- #
       - name: Crea secret Kubernetes (PAT)
         if: ${{ inputs.use_pat }}
@@ -105,9 +124,12 @@ jobs:
             --namespace ${{ inputs.arc_namespace }} \
             --from-literal=github_token='${{ secrets.ARC_GITHUB_TOKEN }}' \
             --dry-run=client -o yaml | kubectl apply -f -
+          echo "Secret PAT applicato."
 
       # ---------------------------------------------------------------- #
-      # 5b. Secret GitHub (GitHub App)
+      # 6b. Secret GitHub (GitHub App)
+      #     Usa variabile d'ambiente per la private key — evita problemi
+      #     con caratteri speciali nell'interpolazione della shell.
       # ---------------------------------------------------------------- #
       - name: Crea secret Kubernetes (GitHub App)
         if: ${{ inputs.use_github_app }}
@@ -127,11 +149,13 @@ jobs:
             --from-file=github_app_private_key=/tmp/arc-app-key.pem
 
           rm -f /tmp/arc-app-key.pem
+          echo "Secret GitHub App applicato."
 
       # ---------------------------------------------------------------- #
-      # 6. Installa/aggiorna il controller ARC
-      #    Deve girare PRIMA del runner set, altrimenti il chart
-      #    non trova il deployment del controller e fallisce il binding.
+      # 7. Installa/aggiorna il controller ARC
+      #    Deve precedere il runner set: il chart del runner set cerca
+      #    il deployment del controller per il role binding e fallisce
+      #    se non lo trova.
       # ---------------------------------------------------------------- #
       - name: Helm upgrade arc-controller
         run: |
@@ -144,7 +168,7 @@ jobs:
             --timeout 5m
 
       # ---------------------------------------------------------------- #
-      # 7. Installa/aggiorna il runner scale set
+      # 8. Installa/aggiorna il runner scale set
       # ---------------------------------------------------------------- #
       - name: Helm upgrade arc-runner-set
         run: |
@@ -158,7 +182,9 @@ jobs:
             --timeout 5m
 
       # ---------------------------------------------------------------- #
-      # 8. Restart controller per recepire eventuali nuovi secret/config
+      # 9. Restart controller
+      #    Necessario per recepire nuovi secret o modifiche alla config
+      #    senza aspettare il ciclo di riconciliazione naturale.
       # ---------------------------------------------------------------- #
       - name: Restart ARC controller
         run: |
@@ -170,7 +196,7 @@ jobs:
             --timeout=120s
 
       # ---------------------------------------------------------------- #
-      # 9. Verifica pod
+      # 10. Verifica pod
       # ---------------------------------------------------------------- #
       - name: Verifica pod runner
         run: |
@@ -187,7 +213,7 @@ jobs:
             --timeout=180s || true
 
       # ---------------------------------------------------------------- #
-      # 10. Summary
+      # 11. Summary
       # ---------------------------------------------------------------- #
       - name: Summary deploy
         if: always()
