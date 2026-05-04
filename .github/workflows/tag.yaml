@@ -1,0 +1,22 @@
+name: Tag repo
+run-name: tag-workflow
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tag repo
+        uses: org-test-reply-1/platform-actions/tag-repo@main
