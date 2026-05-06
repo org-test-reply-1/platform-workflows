@@ -19,7 +19,7 @@ on:
 jobs:
   build:
     name: .NET Build
-    runs-on: ${{ inputs.runner }}
+    runs-on: ubuntu-latest
     outputs:
       artifact-name: ${{ steps.dotnet.outputs.artifact-name }}
 
