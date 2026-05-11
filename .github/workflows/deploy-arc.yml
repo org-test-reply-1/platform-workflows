@@ -101,7 +101,15 @@ jobs:
           namespaces: "${{ inputs.arc_system_namespace }},${{ inputs.arc_namespace }}"
 
       # ---------------------------------------------------------------- #
-      # 5. Secret GitHub (PAT)
+      # 5. Deploy ARC Controller (una sola volta)
+      # ---------------------------------------------------------------- #
+      - name: Deploy ARC Controller
+        uses: org-test-reply-1/platform-actions/deploy-arc-controller@main
+        with:
+          arc_system_namespace: ${{ inputs.arc_system_namespace }}
+
+      # ---------------------------------------------------------------- #
+      # 6. Secret GitHub (PAT)
       # ---------------------------------------------------------------- #
       - name: Crea secret Kubernetes (PAT)
         if: ${{ inputs.use_pat }}
