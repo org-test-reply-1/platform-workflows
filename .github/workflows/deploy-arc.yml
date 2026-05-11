@@ -93,15 +93,15 @@ jobs:
           cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
 
       # ---------------------------------------------------------------- #
-      # 5. Namespace
+      # 4. Crea namespace
       # ---------------------------------------------------------------- #
-      - name: Crea namespace ARC (se assenti)
-        run: |
-          kubectl create namespace ${{ inputs.arc_system_namespace }} --dry-run=client -o yaml | kubectl apply -f -
-          kubectl create namespace ${{ inputs.arc_namespace }} --dry-run=client -o yaml | kubectl apply -f -
+      - name: Crea namespace ARC
+        uses: org-test-reply-1/platform-actions/create-namespaces@main
+        with:
+          namespaces: "${{ inputs.arc_system_namespace }},${{ inputs.arc_namespace }}"
 
       # ---------------------------------------------------------------- #
-      # 6. Secret GitHub (PAT)
+      # 5. Secret GitHub (PAT)
       # ---------------------------------------------------------------- #
       - name: Crea secret Kubernetes (PAT)
         if: ${{ inputs.use_pat }}
@@ -113,9 +113,7 @@ jobs:
           echo "Secret PAT applicato."
 
       # ---------------------------------------------------------------- #
-      # 6b. Secret GitHub (GitHub App)
-      #     Usa variabile d'ambiente per la private key — evita problemi
-      #     con caratteri speciali nell'interpolazione della shell.
+      # 6. Secret GitHub (GitHub App)
       # ---------------------------------------------------------------- #
       - name: Crea secret Kubernetes (GitHub App)
         if: ${{ inputs.use_github_app }}
@@ -138,48 +136,15 @@ jobs:
           echo "Secret GitHub App applicato."
 
       # ---------------------------------------------------------------- #
-      # 7. Installa/aggiorna il controller ARC
-      #    Deve precedere il runner set: il chart del runner set cerca
-      #    il deployment del controller per il role binding e fallisce
-      #    se non lo trova.
+      # 7. Deploy ARC (action composita)
       # ---------------------------------------------------------------- #
-      - name: Helm upgrade arc-controller
-        run: |
-          helm upgrade arc \
-            --install \
-            --namespace ${{ inputs.arc_system_namespace }} \
-            --create-namespace \
-            oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller \
-            --wait \
-            --timeout 5m
-
-      # ---------------------------------------------------------------- #
-      # 8. Installa/aggiorna il runner scale set
-      # ---------------------------------------------------------------- #
-      - name: Helm upgrade arc-runner-set
-        run: |
-          helm upgrade ${{ inputs.arc_runner_set_name }} \
-            --install \
-            --namespace ${{ inputs.arc_namespace }} \
-            --create-namespace \
-            -f ${{ inputs.values_yaml_path }} \
-            oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
-            --wait \
-            --timeout 5m
-
-      # ---------------------------------------------------------------- #
-      # 9. Restart controller
-      #    Necessario per recepire nuovi secret o modifiche alla config
-      #    senza aspettare il ciclo di riconciliazione naturale.
-      # ---------------------------------------------------------------- #
-      - name: Restart ARC controller
-        run: |
-          kubectl rollout restart deployment arc-gha-rs-controller \
-            -n ${{ inputs.arc_system_namespace }}
-
-          kubectl rollout status deployment arc-gha-rs-controller \
-            -n ${{ inputs.arc_system_namespace }} \
-            --timeout=120s
+      - name: Deploy ARC
+        uses: org-test-reply-1/platform-actions/deploy-arc@main
+        with:
+          arc_system_namespace: ${{ inputs.arc_system_namespace }}
+          arc_namespace: ${{ inputs.arc_namespace }}
+          arc_runner_set_name: ${{ inputs.arc_runner_set_name }}
+          values_yaml_path: ${{ inputs.values_yaml_path }}
 
       # ---------------------------------------------------------------- #
       # 10. Verifica pod
