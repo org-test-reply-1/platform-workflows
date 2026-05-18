@@ -1,0 +1,27 @@
+name: CI React Vite
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'Node.js version to use'
+        required: false
+        type: string
+        default: '20'
+      runner:
+        description: 'Runner to use'
+        required: false
+        type: string
+        default: 'ubuntu-latest'
+
+jobs:
+  build:
+    name: React Vite Build & Test
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build & Test
+        uses: org-test-reply-1/platform-actions/react-vite-build@main
+        with:
+          node-version: ${{ inputs.node-version }}
