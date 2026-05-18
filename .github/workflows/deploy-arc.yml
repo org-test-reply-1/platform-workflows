@@ -4,30 +4,30 @@ on:
   workflow_call:
     inputs:
       image_full_tag:
-        description: "Tag completo dell'immagine runner (ghcr.io/org/image:tag)"
+        description: "Full image tag of the runner (ghcr.io/org/image:tag)"
         required: true
         type: string
       arc_runner_set_name:
-        description: "Nome dell'installazione Helm del runner scale set"
+        description: "Helm release name of the runner scale set"
         required: false
         type: string
         default: "arc-runner-set"
       arc_namespace:
-        description: "Namespace Kubernetes dei runner"
+        description: "Kubernetes namespace for the runners"
         required: false
         type: string
         default: "arc-runners"
       arc_system_namespace:
-        description: "Namespace del controller ARC"
+        description: "Namespace of the ARC controller"
         required: false
         type: string
         default: "arc-system"
       github_config_url:
-        description: "URL organization o repository GitHub per ARC"
+        description: "GitHub organization or repository URL for ARC"
         required: true
         type: string
       values_yaml_path:
-        description: "Percorso del values.yaml da aggiornare"
+        description: "Path to the values.yaml to update"
         required: false
         type: string
         default: "./arc-runner-image/values.yaml"
@@ -62,7 +62,7 @@ on:
 
 jobs:
   deploy-arc-runner:
-    name: Deploy ARC Runner su AKS
+    name: Deploy ARC Runner on AKS
     runs-on: ubuntu-latest
     environment: production
 
@@ -84,24 +84,24 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       # ---------------------------------------------------------------- #
-      # 3. Kubeconfig AKS
+      # 3. Set kubeconfig for AKS
       # ---------------------------------------------------------------- #
-      - name: Imposta kubeconfig per AKS
+      - name: Set kubeconfig for AKS
         uses: azure/aks-set-context@v3
         with:
           resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
           cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
 
       # ---------------------------------------------------------------- #
-      # 4. Crea namespace
+      # 4. Create ARC namespaces
       # ---------------------------------------------------------------- #
-      - name: Crea namespace ARC
+      - name: Create ARC namespaces
         uses: org-test-reply-1/platform-actions/create-namespaces@main
         with:
           namespaces: "${{ inputs.arc_system_namespace }},${{ inputs.arc_namespace }}"
 
       # ---------------------------------------------------------------- #
-      # 5. Deploy ARC Controller (una sola volta)
+      # 5. Deploy ARC Controller (once)
       # ---------------------------------------------------------------- #
       - name: Deploy ARC Controller
         uses: org-test-reply-1/platform-actions/deploy-arc-controller@main
@@ -109,21 +109,21 @@ jobs:
           arc_system_namespace: ${{ inputs.arc_system_namespace }}
 
       # ---------------------------------------------------------------- #
-      # 6. Secret GitHub (PAT)
+      # 6. Create Kubernetes secret (PAT)
       # ---------------------------------------------------------------- #
-      - name: Crea secret Kubernetes (PAT)
+      - name: Create Kubernetes secret (PAT)
         if: ${{ inputs.use_pat }}
         run: |
           kubectl create secret generic arc-github-secret \
             --namespace ${{ inputs.arc_namespace }} \
             --from-literal=github_token='${{ secrets.ARC_GITHUB_TOKEN }}' \
             --dry-run=client -o yaml | kubectl apply -f -
-          echo "Secret PAT applicato."
+          echo "PAT secret applied."
 
       # ---------------------------------------------------------------- #
-      # 6. Secret GitHub (GitHub App)
+      # 6. Create Kubernetes secret (GitHub App)
       # ---------------------------------------------------------------- #
-      - name: Crea secret Kubernetes (GitHub App)
+      - name: Create Kubernetes secret (GitHub App)
         if: ${{ inputs.use_github_app }}
         env:
           PRIVATE_KEY: ${{ secrets.ARC_GITHUB_APP_PRIVATE_KEY }}
@@ -141,10 +141,10 @@ jobs:
             --from-file=github_app_private_key=/tmp/arc-app-key.pem
 
           rm -f /tmp/arc-app-key.pem
-          echo "Secret GitHub App applicato."
+          echo "GitHub App secret applied."
 
       # ---------------------------------------------------------------- #
-      # 7. Deploy ARC (action composita)
+      # 7. Deploy ARC (composite action)
       # ---------------------------------------------------------------- #
       - name: Deploy ARC
         uses: org-test-reply-1/platform-actions/deploy-arc@main
@@ -155,14 +155,14 @@ jobs:
           values_yaml_path: ${{ inputs.values_yaml_path }}
 
       # ---------------------------------------------------------------- #
-      # 10. Verifica pod
+      # 8. Verify runner pods
       # ---------------------------------------------------------------- #
-      - name: Verifica pod runner
+      - name: Verify runner pods
         run: |
-          echo "=== Pod in ${{ inputs.arc_namespace }} ==="
+          echo "=== Pods in ${{ inputs.arc_namespace }} ==="
           kubectl get pods -n ${{ inputs.arc_namespace }}
 
-          echo "=== Pod in ${{ inputs.arc_system_namespace }} ==="
+          echo "=== Pods in ${{ inputs.arc_system_namespace }} ==="
           kubectl get pods -n ${{ inputs.arc_system_namespace }}
 
           kubectl wait pod \
@@ -172,15 +172,15 @@ jobs:
             --timeout=180s || true
 
       # ---------------------------------------------------------------- #
-      # 11. Summary
+      # 9. Summary
       # ---------------------------------------------------------------- #
-      - name: Summary deploy
+      - name: Deploy summary
         if: always()
         run: |
-          echo "### Deploy ARC completato" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Campo | Valore |" >> "$GITHUB_STEP_SUMMARY"
+          echo "### ARC Deploy complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Immagine | \`${{ inputs.image_full_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image | \`${{ inputs.image_full_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Runner Set | \`${{ inputs.arc_runner_set_name }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Namespace | \`${{ inputs.arc_namespace }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Cluster | \`${{ secrets.AKS_CLUSTER_NAME }}\` |" >> "$GITHUB_STEP_SUMMARY"
